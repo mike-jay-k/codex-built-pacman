@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pac-Man</title>
+<style>
+  /* Basic layout */
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: #fff;
+  }
+  .score-board {
+    margin: 10px;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(20, 24px);
+    grid-template-rows: repeat(20, 24px);
+    gap: 2px;
+  }
+  #grid div {
+    width: 24px;
+    height: 24px;
+    box-sizing: border-box;
+  }
+
+  /* Tile types */
+  .wall {
+    background: #0033cc;
+  }
+  .pac-dot {
+    position: relative;
+    background: #000;
+  }
+  .pac-dot::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ffd633;
+  }
+  .power-pellet::after {
+    width: 12px;
+    height: 12px;
+  }
+  .empty {
+    background: #000;
+  }
+  .ghost-lair {
+    background: #222;
+  }
+
+  /* Characters */
+  .pacman {
+    background: yellow;
+    border-radius: 50%;
+  }
+  .ghost {
+    border-radius: 50%;
+  }
+  .blinky { background: red; }
+  .pinky { background: hotpink; }
+  .inky { background: cyan; }
+  .clyde { background: orange; }
+  .scared { background: blue !important; }
+
+  #message {
+    margin-top: 10px;
+    font-size: 20px;
+  }
+</style>
+</head>
+<body>
+  <div class="score-board">Score: <span id="score">0</span></div>
+  <div id="grid"></div>
+  <div id="message"></div>
+
+<script>
+  const width = 20;
+  const grid = document.getElementById('grid');
+  const scoreEl = document.getElementById('score');
+  const messageEl = document.getElementById('message');
+  const layout = [];
+
+  // Generate a simple maze programmatically
+  for (let row = 0; row < width; row++) {
+    for (let col = 0; col < width; col++) {
+      let value = 0; // pac-dot
+      if (row === 0 || col === 0 || row === width - 1 || col === width - 1) {
+        value = 1; // outer walls
+      }
+      layout.push(value);
+    }
+  }
+  // Place power pellets in corners
+  layout[width + 1] = 3;
+  layout[width + (width - 2)] = 3;
+  layout[width * (width - 2) + 1] = 3;
+  layout[width * (width - 2) + (width - 2)] = 3;
+  // Create a tunnel for wrap-around
+  layout[Math.floor(width/2)*width] = 4;
+  layout[Math.floor(width/2)*width + width - 1] = 4;
+  // Ghost lair in the center (2x2 square)
+  const center = Math.floor(width / 2);
+  layout[center * width + center] = 2;
+  layout[(center - 1) * width + center] = 2;
+  layout[center * width + (center - 1)] = 2;
+  layout[(center - 1) * width + (center - 1)] = 2;
+
+  const squares = [];
+  function createBoard() {
+    layout.forEach((type, i) => {
+      const square = document.createElement('div');
+      switch (type) {
+        case 0:
+          square.classList.add('pac-dot');
+          break;
+        case 1:
+          square.classList.add('wall');
+          break;
+        case 2:
+          square.classList.add('ghost-lair');
+          break;
+        case 3:
+          square.classList.add('pac-dot', 'power-pellet');
+          break;
+        default:
+          square.classList.add('empty');
+      }
+      grid.appendChild(square);
+      squares.push(square);
+    });
+  }
+  createBoard();
+
+  // Pac-Man
+  let pacmanIndex = width * (width - 3) + 1; // start near bottom left
+  squares[pacmanIndex].classList.add('pacman');
+  let score = 0;
+
+  document.addEventListener('keydown', movePacman);
+
+  function movePacman(e) {
+    squares[pacmanIndex].classList.remove('pacman');
+    let nextIndex = pacmanIndex;
+    switch (e.key) {
+      case 'ArrowLeft':
+        if (pacmanIndex % width === 0) {
+          nextIndex += width - 1; // wrap
+        } else {
+          nextIndex -= 1;
+        }
+        break;
+      case 'ArrowRight':
+        if (pacmanIndex % width === width - 1) {
+          nextIndex -= width - 1; // wrap
+        } else {
+          nextIndex += 1;
+        }
+        break;
+      case 'ArrowUp':
+        nextIndex -= width;
+        break;
+      case 'ArrowDown':
+        nextIndex += width;
+        break;
+    }
+    if (
+      !squares[nextIndex].classList.contains('wall') &&
+      !squares[nextIndex].classList.contains('ghost-lair')
+    ) {
+      pacmanIndex = nextIndex;
+    }
+    eatDot();
+    eatPowerPellet();
+    checkForWin();
+    checkForGameOver();
+    squares[pacmanIndex].classList.add('pacman');
+  }
+
+  function eatDot() {
+    if (squares[pacmanIndex].classList.contains('pac-dot')) {
+      squares[pacmanIndex].classList.remove('pac-dot', 'power-pellet');
+      layout[pacmanIndex] = 4;
+      score += 10;
+      scoreEl.textContent = score;
+    }
+  }
+
+  function eatPowerPellet() {
+    if (squares[pacmanIndex].classList.contains('power-pellet')) {
+      ghosts.forEach(g => g.isScared = true);
+      setTimeout(() => ghosts.forEach(g => g.isScared = false), 10000);
+    }
+  }
+
+  // Ghost constructor
+  class Ghost {
+    constructor(name, startIndex, speed) {
+      this.name = name;
+      this.startIndex = startIndex;
+      this.currentIndex = startIndex;
+      this.speed = speed;
+      this.isScared = false;
+      this.timerId = null;
+    }
+  }
+
+  const ghosts = [
+    new Ghost('blinky', center * width + center, 300),
+    new Ghost('pinky', center * width + center - 1, 350),
+    new Ghost('inky', (center - 1) * width + center, 400),
+    new Ghost('clyde', (center - 1) * width + center - 1, 450)
+  ];
+
+  ghosts.forEach(ghost => {
+    squares[ghost.currentIndex].classList.add('ghost', ghost.name);
+    moveGhost(ghost);
+  });
+
+  function moveGhost(ghost) {
+    const directions = [-1, +1, -width, +width];
+    ghost.timerId = setInterval(() => {
+      let dir = directions[Math.floor(Math.random() * directions.length)];
+      if (!squares[ghost.currentIndex + dir].classList.contains('wall')) {
+        squares[ghost.currentIndex].classList.remove('ghost', ghost.name, 'scared');
+        ghost.currentIndex += dir;
+        if (ghost.isScared) {
+          squares[ghost.currentIndex].classList.add('ghost', ghost.name, 'scared');
+        } else {
+          squares[ghost.currentIndex].classList.add('ghost', ghost.name);
+        }
+      }
+      if (ghost.isScared && ghost.currentIndex === pacmanIndex) {
+        squares[ghost.currentIndex].classList.remove('ghost', ghost.name, 'scared');
+        ghost.currentIndex = ghost.startIndex;
+        score += 100;
+        scoreEl.textContent = score;
+        squares[ghost.currentIndex].classList.add('ghost', ghost.name);
+        ghost.isScared = false;
+      }
+      checkForGameOver();
+    }, ghost.speed);
+  }
+
+  function checkForGameOver() {
+    if (
+      ghosts.some(
+        g => g.currentIndex === pacmanIndex && !g.isScared
+      )
+    ) {
+      ghosts.forEach(g => clearInterval(g.timerId));
+      document.removeEventListener('keydown', movePacman);
+      messageEl.textContent = 'Game Over';
+    }
+  }
+
+  function checkForWin() {
+    if (layout.every(val => val !== 0 && val !== 3)) {
+      ghosts.forEach(g => clearInterval(g.timerId));
+      document.removeEventListener('keydown', movePacman);
+      messageEl.textContent = 'You Win!';
+    }
+  }
+</script>
+</body>
+</html>
